@@ -1,0 +1,34 @@
+//@version=5
+strategy("MACD Crossover Strategy", overlay=true)
+
+// Input parameters
+fastLength = input(12, "Fast Length")
+slowLength = input(26, "Slow Length")
+signalLength = input(9, "Signal Length")
+useClosePrice = input(true, "Use Close Price")
+
+// Calculate MACD
+[macdLine, signalLine, histLine] = ta.macd(close, fastLength, slowLength, signalLength)
+
+// Plot MACD components
+plot(macdLine, color=color.blue, title="MACD Line")
+plot(signalLine, color=color.red, title="Signal Line")
+plot(histLine, color=color.green, style=plot.style_histogram, title="Histogram")
+
+// Strategy logic
+longCondition = ta.crossover(macdLine, signalLine)
+shortCondition = ta.crossunder(macdLine, signalLine)
+
+// Entry and exit conditions
+if (longCondition)
+    strategy.entry("Long", strategy.long)
+
+if (shortCondition)
+    strategy.entry("Short", strategy.short)
+
+// Plot entry and exit signals
+plotshape(longCondition, title="Buy Signal", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.small)
+plotshape(shortCondition, title="Sell Signal", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.small)
+
+// Add background color for visual reference
+bgcolor(longCondition ? color.new(color.green, 90) : shortCondition ? color.new(color.red, 90) : na) 
