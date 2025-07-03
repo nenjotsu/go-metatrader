@@ -59,3 +59,27 @@ func ParseInt64(s string) int64 {
 	i, _ := strconv.Atoi(s)
 	return int64(i)
 }
+
+func GetProfitLoss(currentPrice float64, entryPrice float64, volume float64) float64 {
+	return (currentPrice - entryPrice) * volume
+}
+
+func GetPercentChange(currentPrice float64, entryPrice float64) float64 {
+	return ((currentPrice - entryPrice) / entryPrice) * 100
+}
+
+func GetAbsoluteChange(currentPrice float64, entryPrice float64) float64 {
+	return currentPrice - entryPrice
+}
+
+func GetAbsoluteChangePercent(currentPrice float64, entryPrice float64) float64 {
+	return ((currentPrice - entryPrice) / entryPrice) * 100
+}
+
+func GetRelativeChange(currentPrice float64, entryPrice float64) float64 {
+	return (currentPrice - entryPrice) / entryPrice
+}
+
+func GetRelativeChangePercent(currentPrice float64, entryPrice float64) float64 {
+	return ((currentPrice - entryPrice) / entryPrice) * 100
+}

@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/FortesenseLabs/go-metatrader/metatrader/actiontype"
-	"github.com/FortesenseLabs/go-metatrader/metatrader/models"
-	"github.com/FortesenseLabs/go-metatrader/metatrader/timeframes"
-	"github.com/FortesenseLabs/go-metatrader/metatrader/utils"
 	"github.com/go-gota/gota/dataframe"
 	"github.com/mitchellh/mapstructure"
+	"github.com/nenjotsu/go-metatrader/metatrader/actiontype"
+	"github.com/nenjotsu/go-metatrader/metatrader/models"
+	"github.com/nenjotsu/go-metatrader/metatrader/timeframes"
+	"github.com/nenjotsu/go-metatrader/metatrader/utils"
 )
 
 type MetaTrader struct {
@@ -107,6 +107,34 @@ func (mt *MetaTrader) GetOrders() (*models.Orders, error) {
 
 	return orders, nil
 }
+func (mt *MetaTrader) GetOrdersBySymbol(symbol string) (*models.Orders, error) {
+	response, err := mt.API.SendCommand("ORDERS|symbol=" + symbol)
+	if err != nil {
+		return nil, err
+	}
+
+	responseMap := response.(map[string]interface{})
+	dataMap := responseMap["orders"].([]interface{})
+
+	if len(dataMap) == 0 {
+		return nil, fmt.Errorf("no order data found for symbol %s", symbol)
+	}
+
+	var orders *models.Orders
+
+	err = mapstructure.Decode(dataMap, &orders)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding response: %s", err)
+	}
+
+	fmt.Printf("Orders: %+v\n", orders)
+
+	if orders == nil {
+		return nil, fmt.Errorf("no order data found for symbol %s", symbol)
+	}
+
+	return orders, nil
+}
 
 func (mt *MetaTrader) GetPositions() (*models.Positions, error) {
 	response, err := mt.API.SendCommand("POSITIONS")
@@ -143,6 +171,8 @@ func (mt *MetaTrader) GetAccountInfo() (*models.AccountInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error decoding response: %s", err)
 	}
+
+	fmt.Printf("Account info: %+v\n", accountInfo)
 
 	return accountInfo, nil
 }
@@ -206,6 +236,7 @@ func (mt *MetaTrader) ProcessHistoricalData(data map[string]interface{}, timeFra
 
 		for _, trade := range dataMap {
 			// Split the input into individual records
+			fmt.Sprintf("%v", trade)
 			fields := strings.Split(trade.(string), "||")
 
 			trades = append(trades, models.Trade{
@@ -216,7 +247,7 @@ func (mt *MetaTrader) ProcessHistoricalData(data map[string]interface{}, timeFra
 				Symbol:    fields[4],
 				Type:      fields[5],
 				Entry:     fields[6],
-				Profit:    fields[7],
+				// Profit:    fields[7],
 			})
 		}
 
@@ -289,7 +320,7 @@ func (mt *MetaTrader) ProcessHistoricalData(data map[string]interface{}, timeFra
 	return &df, nil
 }
 
-func (mt *MetaTrader) Trade(symbol string, actionType string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64) error {
+func (mt *MetaTrader) Trade(symbol string, actionType string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64, id int64) error {
 
 	if len(symbol) == 0 {
 		return fmt.Errorf("symbol is required")
@@ -317,10 +348,15 @@ func (mt *MetaTrader) Trade(symbol string, actionType string, volume float64, st
 	}
 
 	var command string
-
-	id := strconv.FormatInt(time.Now().Unix(), 10)
-	expiration := 0 // int(time.time()) + 60 * 60 * 24  # 1 day
-	command = "TRADE|id=" + id + "|actionType=" + actionType + "|symbol=" + symbol + "|volume=" + strconv.FormatFloat(volume, 'f', -1, 64) + "|price=" + strconv.FormatFloat(price, 'f', -1, 64) + "|stoploss=" + strconv.FormatFloat(stoploss, 'f', -1, 64) + "|takeprofit=" + strconv.FormatFloat(takeprofit, 'f', -1, 64) + "|expiration=" + strconv.Itoa(expiration) + "|deviation=" + strconv.FormatFloat(deviation, 'f', -1, 64)
+	trade_id := strconv.FormatInt(time.Now().Unix(), 10)
+	if id > 0 {
+		trade_id = strconv.FormatInt(id, 10)
+	}
+	// expiration = 0 // int(time.time()) + 60 * 60 * 24  # 1 day
+	// expiration in 1 hour
+	expiration := 0 // int(time.Now().Unix()) + 60*60 // 1 hr
+	// expiration = int(time.Now().Unix()) + 60*60 // 1 hr
+	command = "TRADE|id=" + trade_id + "|actionType=" + actionType + "|symbol=" + symbol + "|volume=" + strconv.FormatFloat(volume, 'f', -1, 64) + "|price=" + strconv.FormatFloat(price, 'f', -1, 64) + "|stoploss=" + strconv.FormatFloat(stoploss, 'f', -1, 64) + "|takeprofit=" + strconv.FormatFloat(takeprofit, 'f', -1, 64) + "|expiration=" + strconv.Itoa(expiration) + "|deviation=" + strconv.FormatFloat(deviation, 'f', -1, 64)
 	// return mt.API.SendCommand("TRADE|id=" + id + "|actionType=" + actionType + "|symbol=" + symbol + "|volume=" + strconv.FormatFloat(volume, 'f', -1, 64) + "|price=" + strconv.FormatFloat(price, 'f', -1, 64) + "|stoploss=" + strconv.FormatFloat(stoploss, 'f', -1, 64) + "|takeprofit=" + strconv.FormatFloat(takeprofit, 'f', -1, 64) + "|deviation=" + strconv.FormatFloat(deviation, 'f', -1, 64))
 	fmt.Println(command)
 
@@ -333,108 +369,158 @@ func (mt *MetaTrader) Trade(symbol string, actionType string, volume float64, st
 }
 
 func (mt *MetaTrader) Buy(symbol string, volume float64, stoploss float64, takeprofit float64, deviation float64) error {
-	return mt.Trade(symbol, "ORDER_TYPE_BUY", volume, stoploss, takeprofit, 0, deviation)
+	return mt.Trade(symbol, "ORDER_TYPE_BUY", volume, stoploss, takeprofit, 0, deviation, 0)
 }
 
-// func (mt *MetaTrader) Sell(symbol string, volume float64, stoploss float64, takeprofit float64, deviation float64) (*models.TradeResponse, error) {
-// 	return mt.trade(symbol, "ORDER_TYPE_SELL", volume, stoploss, takeprofit, 0, deviation)
-// }
+func (mt *MetaTrader) Sell(symbol string, volume float64, stoploss float64, takeprofit float64, deviation float64) error {
+	return mt.Trade(symbol, "ORDER_TYPE_SELL", volume, stoploss, takeprofit, 0, deviation, 0)
+}
 
-// func (mt *MetaTrader) BuyLimit(symbol string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64) (*models.TradeResponse, error) {
-// 	return mt.trade(symbol, "ORDER_TYPE_BUY_LIMIT", volume, stoploss, takeprofit, price, deviation)
-// }
+func (mt *MetaTrader) BuyLimit(symbol string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64) error {
+	return mt.Trade(symbol, "ORDER_TYPE_BUY_LIMIT", volume, stoploss, takeprofit, price, deviation, 0)
+}
 
-// func (mt *MetaTrader) SellLimit(symbol string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64) (*models.TradeResponse, error) {
-// 	return mt.trade(symbol, "ORDER_TYPE_SELL_LIMIT", volume, stoploss, takeprofit, price, deviation)
-// }
+func (mt *MetaTrader) SellLimit(symbol string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64) error {
+	return mt.Trade(symbol, "ORDER_TYPE_SELL_LIMIT", volume, stoploss, takeprofit, price, deviation, 0)
+}
 
-// func (mt *MetaTrader) BuyStop(symbol string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64) (*models.TradeResponse, error) {
-// 	return mt.trade(symbol, "ORDER_TYPE_BUY_STOP", volume, stoploss, takeprofit, price, deviation)
-// }
+func (mt *MetaTrader) BuyStop(symbol string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64) error {
+	return mt.Trade(symbol, "ORDER_TYPE_BUY_STOP_LIMIT", volume, stoploss, takeprofit, price, deviation, 0)
+}
 
-// func (mt *MetaTrader) SellStop(symbol string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64) (*models.TradeResponse, error) {
-// 	return mt.trade(symbol, "ORDER_TYPE_SELL_STOP", volume, stoploss, takeprofit, price, deviation)
-// }
+func (mt *MetaTrader) SellStop(symbol string, volume float64, stoploss float64, takeprofit float64, price float64, deviation float64) error {
+	return mt.Trade(symbol, "ORDER_TYPE_SELL_STOP_LIMIT", volume, stoploss, takeprofit, price, deviation, 0)
+}
 
-// func (mt *MetaTrader) CancelOrderByTicketID(id int) (*models.TradeResponse, error) {
-// 	symbol := ""
-// 	volume := 0.0
-// 	price := 0.0
-// 	stoploss := 0.0
-// 	takeprofit := 0.0
-// 	// expiration := 0
-// 	deviation := 0.0
-// 	comment := "cancel order"
+func (mt *MetaTrader) CancelOrderByTicketID(id int64, symbol string, priceOpen float64, stoploss float64, takeprofit float64, volume float64) error {
+	// symbol := ""
+	// volume := 0.0
+	price := 0.0
+	if stoploss == 0 || takeprofit == 0 {
+		stoploss = priceOpen - 0.5
+		takeprofit = priceOpen + 0.5
+	}
+	// stoploss := 3359.352
+	// takeprofit := 3360.352
+	// expiration := 0
+	deviation := 10.0
+	// comment := "cancel order"
 
-// 	return mt.trade(symbol, "ORDER_CANCEL", volume, stoploss, takeprofit, price, deviation, comment, id)
-// }
+	return mt.Trade(symbol, "ORDER_CANCEL", volume, stoploss, takeprofit, price, deviation, id)
+}
 
-// func (mt *MetaTrader) ClosePositionByTicketID(id int) (*models.TradeResponse, error) {
-// 	symbol := ""
-// 	volume := 0.0
-// 	price := 0.0
-// 	stoploss := 0.0
-// 	takeprofit := 0.0
-// 	// expiration := 0
-// 	deviation := 0.0
-// 	comment := "close position"
+func (mt *MetaTrader) ClosePositionByTicketID(id int64, symbol string, price float64, stoploss float64, takeprofit float64, volume float64) error {
+	// symbol := ""
+	// volume := 0.0
+	// price :=
+	if stoploss == 0 || takeprofit == 0 {
+		stoploss = price - 0.5
+		takeprofit = price + 0.5
+	}
+	// stoploss := 0.0
+	// takeprofit := 0.0
+	// expiration := 0
+	deviation := 10.0
+	// comment := "close position"
 
-// 	return mt.trade(symbol, "POSITION_CLOSE_ID", volume, stoploss, takeprofit, price, deviation, comment, id)
-// }
+	return mt.Trade(symbol, "POSITION_CLOSE_ID", volume, stoploss, takeprofit, price, deviation, id)
+}
 
-// func (mt *MetaTrader) ClosePositionBySymbol(symbol string) (*models.TradeResponse, error) {
-// 	id := ""
-// 	volume := 0.0
-// 	price := 0.0
-// 	stoploss := 0.0
-// 	takeprofit := 0.0
-// 	// expiration := 0
-// 	deviation := 0.0
-// 	comment := "close position"
+func (mt *MetaTrader) ClosePositionBySymbol(symbol string, price float64, stoploss float64, takeprofit float64, volume float64) error {
+	// id := ""
+	// volume := 0.0
+	if stoploss == 0 || takeprofit == 0 {
+		stoploss = price - 0.5
+		takeprofit = price + 0.5
+	}
+	// price := 0.0
+	// stoploss := 0.0
+	// takeprofit := 0.0
+	// expiration := 0
+	deviation := 10.0
+	// comment := "close position"
 
-// 	return mt.trade(symbol, "POSITION_CLOSE_SYMBOL", volume, stoploss, takeprofit, price, deviation, comment, id)
-// }
+	return mt.Trade(symbol, "POSITION_CLOSE_SYMBOL", volume, stoploss, takeprofit, price, deviation, 0)
+}
 
-// func (mt *MetaTrader) ClosePartialPosition(positionID int, volume float64) (*models.TradeResponse, error) {
-// 	symbol := ""
-// 	price := 0.0
-// 	stoploss := 0.0
-// 	takeprofit := 0.0
-// 	// expiration := 0
-// 	deviation := 0.0
-// 	comment := "close position"
+func (mt *MetaTrader) ClosePartialPosition(positionID int64, symbol string, price float64, stoploss float64, takeprofit float64, volume float64) error {
+	// symbol := ""
+	// price := 0.0
+	// stoploss := 0.0
+	// takeprofit := 0.0
+	// expiration := 0
+	if stoploss == 0 || takeprofit == 0 {
+		stoploss = price - 0.5
+		takeprofit = price + 0.5
+	}
+	deviation := 10.0
+	// comment := "close position"
 
-// 	return mt.trade(symbol, "POSITION_PARTIAL", volume, stoploss, takeprofit, price, deviation, comment, positionID)
-// }
+	return mt.Trade(symbol, "POSITION_PARTIAL", volume, stoploss, takeprofit, price, deviation, positionID)
+}
 
-// func (mt *MetaTrader) CancelAllOrders() (*models.TradeResponse, error) {
-// 	orders, err := mt.GetOrders()
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func (mt *MetaTrader) CancelAllOrders() error {
+	orders, err := mt.GetOrders()
+	if err != nil {
+		return err
+	}
 
-// 	for _, order := range orders.Orders {
-// 		_, err := mt.CancelOrderByTicketID(order.ID)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 	}
+	for _, order := range *orders {
+		// parse id string to int
 
-// 	return nil, nil
-// }
+		id, err := strconv.ParseInt(order.Id, 10, 64)
+		if err != nil {
+			return err
+		}
 
-// func (mt *MetaTrader) CloseAllPositions() (*models.TradeResponse, error) {
-// 	positions, err := mt.GetPositions()
-// 	if err != nil {
-// 		return nil, err
-// 	}
+		err = mt.CancelOrderByTicketID(id, order.Symbol, order.Open, order.Stoploss, order.Takeprofit, order.Volume)
+		if err != nil {
+			return err
+		}
+	}
 
-// 	for _, position := range positions.Positions {
-// 		_, err := mt.ClosePositionByTicketID(position.ID)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 	}
+	return nil
+}
+func (mt *MetaTrader) CancelAllOrdersBySymbol(symbol string) error {
+	orders, err := mt.GetOrdersBySymbol(symbol)
+	if err != nil {
+		return err
+	}
 
-// 	return nil, nil
-// }
+	for _, order := range *orders {
+		// parse id string to int
+		if order.Symbol != symbol {
+			continue
+		}
+		id, err := strconv.ParseInt(order.Id, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		err = mt.CancelOrderByTicketID(id, order.Symbol, order.Open, order.Stoploss, order.Takeprofit, order.Volume)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (mt *MetaTrader) CloseAllPositions() error {
+	positions, err := mt.GetPositions()
+	if err != nil {
+		return err
+	}
+	if positions != nil {
+		for _, position := range *positions {
+			//  parse int to int64
+			id := int64(position.Id)
+			err := mt.ClosePositionByTicketID(id, position.Symbol, position.Open, position.Stoploss, position.Takeprofit, position.Volume)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}

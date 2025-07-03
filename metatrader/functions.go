@@ -67,7 +67,7 @@ func (mt *MTFunctions) recv(bufferSize int) ([]byte, error) {
 	data := make([]byte, bufferSize)
 
 	n, err := mt.sock.Read(data)
-	if n == 0 && len(data) == 0 && err == nil { 
+	if n == 0 && len(data) == 0 && err == nil {
 		return nil, fmt.Errorf("no data received from the server")
 	}
 
@@ -97,6 +97,7 @@ func (mt *MTFunctions) getReply() (interface{}, error) {
 		if err := json.Unmarshal([]byte(buffer), &msg); err == nil {
 			// Successfully parsed JSON, return the message
 			// fmt.Println("msg => ", msg)
+			// msg =>  map[ask:3335.88 bid:3335.768 desription:TRADE_RETCODE_DONE error:false function:TradingModule order:1.107089863e+09 price:3335.768 retcode:10009 volume:0.01]
 			return msg, nil
 		} else if _, ok := err.(*json.SyntaxError); ok {
 			// Incomplete JSON, continue reading
