@@ -252,7 +252,12 @@ func main() {
 
 	// loop on positions
 	if positions != nil {
-
+		// close all positions
+		err := mt.CloseAllPositions()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 		for _, position := range *positions {
 			// get current Price
 			fmt.Printf("position: %+v\n", position)
@@ -275,13 +280,6 @@ func main() {
 			fmt.Printf("currentPrice: %+v\n", currentPrice)
 			symbol := position.Symbol
 
-			// close all positions
-			// err := mt.CloseAllPositions()
-			// if err != nil {
-			// 	fmt.Println(err)
-			// 	return
-			// }
-
 			if symbol == "XAUUSD" {
 				// err = mt.ClosePositionByTicketID(int64(position.Id), position.Symbol, currentPrice, position.Stoploss, position.Takeprofit, position.Volume)
 				// if err != nil {
@@ -289,11 +287,11 @@ func main() {
 				// 	return
 				// }
 
-				// err = mt.ClosePositionBySymbol(symbol, currentPrice, position.Stoploss, position.Takeprofit, position.Volume)
-				// if err != nil {
-				// 	fmt.Println(err)
-				// 	return
-				// }
+				err = mt.ClosePositionBySymbol(symbol, currentPrice, position.Stoploss, position.Takeprofit, position.Volume)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
 
 				// err = mt.ClosePartialPosition(int64(position.Id), position.Symbol, currentPrice, position.Stoploss, position.Takeprofit, (position.Volume / 2))
 				// if err != nil {
